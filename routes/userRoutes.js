@@ -6,7 +6,7 @@ const middleware = require('../middleware/middleware')
 const router = express.Router();
 
 router.post('/register', UserController.register);
-router.post('/login', UserController.login);
+router.post('/login',middleware.loginAuth ,UserController.login);
 router.get('/:username', UserController.getUserProfile);
 router.put('/update', UserController.updateProfile);
 
