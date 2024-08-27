@@ -1,28 +1,52 @@
 const express = require('express');
-const mongoose = require('mongoose');
+const http = require('http');
+const socketIo = require('socket.io');
 const cors = require('cors');
-const session = require('express-session');
-const userRoutes = require('./routes/userRoutes');
+const mongoose = require('mongoose');
+const router = require('./routes/userRoutes'); // Ensure your routes are correctly defined
+require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-
 // MongoDB connection
-mongoose.connect('mongodb+srv://admin:zygis1998@backenddb.nyim9vu.mongodb.net/?retryWrites=true&w=majority&appName=backendDB', {
+mongoose.connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
-    useUnifiedTopology: true,
-}).then(() => console.log('Connected to MongoDB'))
-    .catch(err => console.log('Failed to connect to MongoDB', err));
+    useUnifiedTopology: true
+})
+    .then(() => console.log('MongoDB connected successfully'))
+    .catch((err) => console.log('MongoDB connection error:', err));
 
-// Routes
-app.use('/', userRoutes);
+// Socket.io connection handling
+io.on('connection', (socket) => {
+    console.log('A user connected:', socket.id);
 
-// Start the server
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+    });
+
+    // Handle custom events here, if needed
+});
+
+// Middleware to provide io instance to routes
+app.use((req, res, next) => {
+    req.io = io;
+    next();
+});
+
+// Use the routes
+app.use('/api/users', router);
+
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
