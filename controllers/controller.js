@@ -230,11 +230,11 @@ const UserController = {
                 return res.status(400).json({ message: 'Invalid credentials' });
             }
 
-            // Generate a JWT token
+
             const token = jwt.sign(
                 { id: user._id, username: user.username },
                 process.env.JWT_SECRET,
-                { expiresIn: '1h' } // Token expires in 1 hour
+                { expiresIn: '1h' }
             );
 
             res.status(200).json({ message: 'Logged in successfully', token, user });

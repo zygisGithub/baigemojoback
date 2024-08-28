@@ -7,7 +7,7 @@ router.post('/register', UserController.register);
 router.post('/login',middleware.loginAuth ,UserController.login);
 router.get('/:username', UserController.getUserProfile);
 router.put('/update', UserController.updateProfile);
-router.post('/getUsers', UserController.getAllUsers)
+router.get('/getUsers', UserController.getAllUsers)
 router.post('/sendMessage', UserController.sendMessage);
 router.post('/getMessages', UserController.getMessages);
 router.post('/sendFriendRequest', UserController.sendFriendRequest)
