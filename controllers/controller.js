@@ -5,18 +5,98 @@ const Message = require('../schemas/messageSchema')
 const Notification = require('../schemas/notificationSchema')
 require('dotenv').config();
 
+
+
 const UserController = {
-    // controllers/userController.js
+    getUserByUsername: async (req, res) => {
+        try {
+            const username = req.params.username;
+            const user = await User.findOne({ username }).select('-password'); // Exclude password
+
+            if (!user) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+
+            res.status(200).json(user);
+        } catch (error) {
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    },
+
+    updateProfile: async (req, res) => {
+        const { userId } = req.body;
+        const updateData = req.body; // Make sure to filter out fields you don't want to update
+
+        try {
+            const updatedUser = await User.findByIdAndUpdate(userId, updateData, { new: true });
+            if (!updatedUser) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+            res.status(200).json({ message: 'Profile updated successfully', user: updatedUser });
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    },
+
+// Change Profile Photo
+    changePhoto: async (req, res) => {
+        const { userId, photoUrl } = req.body;
+
+        try {
+            const user = await User.findById(userId);
+            if (!user) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+
+            user.photo = photoUrl;
+            await user.save();
+
+            // Emit event for profile photo change
+            req.io.emit('profilePhotoChanged', { userId, photoUrl });
+
+            res.status(200).json({ message: 'Profile photo updated successfully', photoUrl });
+        } catch (error) {
+            console.error('Error changing profile photo:', error);
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    },
+
+    markNotificationsAsRead: async (req, res) => {
+        const { userId } = req.params;
+
+        try {
+            const result = await Notification.updateMany(
+                { userId, read: false },
+                { $set: { read: true } }
+            );
+
+            res.status(200).json({ message: 'Notifications marked as read', result });
+        } catch (error) {
+            console.error('Error marking notifications as read:', error);
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    },
     getNotifications: async (req, res) => {
         try {
-            const { userId } = req.params; // Retrieve userId from the request params
-            const notifications = await Notification.find({ userId: userId }).sort({ createdAt: -1 });
+            const { userId } = req.params;
+            const { read } = req.query; // e.g., ?read=false to get unread notifications
+
+            const query = { userId };
+            if (read !== undefined) {
+                query.read = read === 'true'; // Convert to boolean
+            }
+
+            const notifications = await Notification.find(query).sort({ createdAt: -1 });
             res.status(200).json({ message: 'Notifications retrieved successfully', notifications });
         } catch (error) {
             console.error('Error retrieving notifications:', error);
             res.status(500).json({ message: 'Server error', error: error.message });
         }
     },
+
+    // controllers/userController.js
+    // controllers/userController.js
 
     reactToMessage: async (req, res) => {
         const { messageId, userId, reactionType } = req.body;
@@ -60,7 +140,6 @@ const UserController = {
 
             await message.save();
 
-            // Create a notification for the message owner
             if (messageOwner.toString() !== userId.toString()) {
                 const notificationContent = `${user.username} reacted to your message ${reactionType}.`;
                 await Notification.create({
@@ -68,18 +147,23 @@ const UserController = {
                     type: 'reaction',
                     content: notificationContent
                 });
+            }
 
-                // Emit the notification event
-                req.io.to(messageOwner).emit('newNotification', { userId: messageOwner, type: 'reaction', content: notificationContent });
+            let notification = {
+                userId: messageOwner,
+                type: 'reaction',
+                content: `${user.username} reacted to your message ${reactionType}.`
             }
 
             req.io.emit('messageUpdated', message);
-            res.status(200).json({ message: 'Reaction updated successfully', message });
+            res.status(200).json({ message: 'Reaction updated successfully', message, notification: notification});
         } catch (error) {
             console.error('Error reacting to message:', error);
             res.status(500).json({ message: 'Server error', error: error.message });
         }
     },
+
+
 
     // controllers/userController.js
     sendFriendRequest:  async (req, res) => {
@@ -183,7 +267,7 @@ const UserController = {
     },
     getAllUsers: async (req, res) => {
         try {
-            const users = await User.find();
+            const users = await User.find().select('-password'); // Exclude password
             res.status(200).json({ message: 'Get users success', users: users });
         } catch (error) {
             res.status(500).json({ message: 'Server error', error });
@@ -208,15 +292,17 @@ const UserController = {
 
             await newUser.save();
 
-            // Emit an event to all connected clients
-            req.io.emit('newUser', newUser);
+            const userResponse = await User.findById(newUser._id).select('-password'); // Exclude password
 
-            res.status(201).json({ message: 'User registered successfully', user: newUser });
+            req.io.emit('newUser', userResponse);
+
+            res.status(201).json({ message: 'User registered successfully', user: userResponse });
         } catch (error) {
-            console.error('Error during registration:', error);  // Log the error
+            console.error('Error during registration:', error);
             res.status(500).json({ message: 'Server error', error: error.message });
         }
     },
+
 
 
 
@@ -230,27 +316,22 @@ const UserController = {
                 return res.status(400).json({ message: 'Invalid credentials' });
             }
 
-
             const token = jwt.sign(
                 { id: user._id, username: user.username },
                 process.env.JWT_SECRET,
                 { expiresIn: '1h' }
             );
 
-            res.status(200).json({ message: 'Logged in successfully', token, user });
+            const userResponse = await User.findById(user._id).select('-password'); // Exclude password
+
+            res.status(200).json({ message: 'Logged in successfully', token, user: userResponse });
         } catch (error) {
             res.status(500).json({ message: 'Server error', error });
         }
     },
 
 
-    getUserProfile: async (req, res) => {
-        // Implement the logic for fetching user profile
-    },
 
-    updateProfile: async (req, res) => {
-        // Implement the logic for updating the user profile
-    },
 };
 
 module.exports = UserController;
