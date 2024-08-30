@@ -5,51 +5,7 @@ const Notification = require('../schemas/notificationSchema');
 const mongoose = require('mongoose');
 
 const ChatController = {
-    addReaction: async (req, res) => {
-        const { chatId, messageId, userId, reactionType } = req.body;
 
-        try {
-            // Find the chat
-            const chat = await Chat.findById(chatId);
-            if (!chat) {
-                return res.status(404).json({ message: 'Chat not found' });
-            }
-
-            // Find the message
-            const message = await BasicMessage.findById(messageId);
-            if (!message) {
-                return res.status(404).json({ message: 'Message not found' });
-            }
-
-            // Add or update reaction
-            let reaction = message.reactions.find(r => r.userId.toString() === userId.toString());
-            if (reaction) {
-                // Update existing reaction
-                reaction.type = reactionType;
-            } else {
-                // Add new reaction
-                message.reactions.push({ userId, type: reactionType });
-            }
-
-            await message.save();
-
-            // Notify the chat participants
-            const notificationContent = `${userId} reacted to a message.`;
-            const notification = await Notification.create({
-                userId: message.senderId,
-                type: 'reaction',
-                content: notificationContent,
-                chatId: chatId
-            });
-
-            req.io.to(chatId).emit('reactionUpdated', { messageId, reaction });
-
-            res.status(200).json({ message: 'Reaction added/updated successfully', message });
-        } catch (error) {
-            console.error('Error adding/updating reaction:', error);
-            res.status(500).json({ message: 'Server error', error: error.message });
-        }
-    },
     getMessagesByChatId: async (req, res) => {
         const { chatId } = req.params;
 
@@ -99,7 +55,7 @@ const ChatController = {
         }
     },
 
-    addParticipants: async (req, res) => {
+    addParticipants:  async (req, res) => {
         const { chatId, newParticipant, user } = req.body;
 
         try {
@@ -142,12 +98,16 @@ const ChatController = {
                 chatId: chatId
             });
 
+            // Emit event to notify all connected clients about the new participant
+            req.io.to(chatId).emit('addUser', chatId);
+
             res.status(200).json({ message: 'Participant added successfully', chat, notification });
         } catch (error) {
             console.error('Error adding participants:', error);
             res.status(500).json({ message: 'Server error', error: error.message });
         }
     },
+
 
 
 
@@ -196,13 +156,14 @@ const ChatController = {
             req.io.to(chatId).emit('newMessage', newMessage);
 
             const notifications = [];
-            for (const _id of chat.participants) {
-                if (_id.toString() !== senderId.toString()) {
+            for (const user of chat.participants) {
+                if (user.userId.toString() !== senderId.toString()) {
                     const notificationContent = `${sender.username} sent a message in chat.`;
                     const notification = await Notification.create({
-                        userId: _id,
+                        userId: user.userId,
                         type: 'message',
-                        content: notificationContent
+                        content: notificationContent,
+                        chatId: chatId
                     });
                     notifications.push(notification);
                 }

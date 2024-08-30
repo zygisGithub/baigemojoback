@@ -28,7 +28,6 @@ const initializeSocket = (server) => {
 
         // Handle notifications
         socket.on('sendNotification', (notification) => {
-            console.log('notification',notification)
             if (notification && notification.userId) {
                 const recipientSocketId = onlineUsers.get(notification.userId);
                 if (recipientSocketId) {
