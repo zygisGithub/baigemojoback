@@ -6,7 +6,8 @@ const notificationSchema = new mongoose.Schema({
     type: { type: String, required: true }, // e.g., 'reaction', 'friendRequest', etc.
     content: { type: String, required: true },
     read: { type: Boolean, default: false },
-    createdAt: { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now },
+    chatId: String,
 });
 
 module.exports = mongoose.model('Notification', notificationSchema);

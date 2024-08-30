@@ -1,16 +1,13 @@
-// models/chatSchema.js
+// schemas/chatSchema.js
 const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
 
-const chatSchema = new mongoose.Schema({
-    participants: [mongoose.Schema.Types.ObjectId], // List of user IDs participating in this chat
-    messages: [
-        {
-            senderId: mongoose.Schema.Types.ObjectId,
-            content: String,
-            timestamp: { type: Date, default: Date.now }
-        }
-    ],
-    name: { type: String, default: '' } // Optional: chat room name
+const chatSchema = new Schema({
+    participants: [{ type: {}, required: true }],
+    name: { type: String, required: false },
+    participantsNames: [String]
 });
 
-module.exports = mongoose.model('Chat', chatSchema);
+const Chat = mongoose.models.Chat || mongoose.model('Chat', chatSchema);
+
+module.exports = Chat;

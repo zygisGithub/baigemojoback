@@ -1,7 +1,7 @@
 const express = require('express');
 const UserController = require('../controllers/controller');
 const middleware = require('../middleware/middleware');
-
+const ChatController = require('../controllers/chatController')
 
 const router = express.Router();
 
@@ -22,7 +22,14 @@ router.post('/notificationsMarkRead/:userId', UserController.markNotificationsAs
 router.put('/updateProfile', UserController.updateProfile);
 router.post('/changePhoto', UserController.changePhoto);
 router.get('/getUserByUsername/:username', UserController.getUserByUsername);
-
+router.post('/create', ChatController.createChat);
+router.post('/addParticipants', ChatController.addParticipants);
+router.get('/:chatId', ChatController.getChat);
+router.post('/sendMessageChat', ChatController.sendMessage);
+router.post('/startChat', middleware.userAuth,UserController.startChatWithUser)
+router.post('/chats', middleware.userAuth, ChatController.getChats)
+router.get('/messages/:chatId', ChatController.getMessagesByChatId);
+router.post('/addParticipants', ChatController.addParticipants)
 
 
 

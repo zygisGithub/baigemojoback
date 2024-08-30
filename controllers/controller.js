@@ -3,11 +3,67 @@ const jwt = require('jsonwebtoken');
 const User = require('../schemas/userSchema');
 const Message = require('../schemas/messageSchema')
 const Notification = require('../schemas/notificationSchema')
+const Chat = require('../schemas/chatSchema')
 require('dotenv').config();
 
 
 
 const UserController = {
+    startChatWithUser: async (req, res) => {
+        const { userId } = req.body; // ID of the user whose profile is being viewed
+        const currentUserId = req.user.id; // Assuming `req.user.id` is available from the auth middleware
+
+        try {
+            // Check if a chat already exists between these users
+            let chat = await Chat.findOne({
+                participants: { $all: [currentUserId, userId] }
+            });
+            const senderUser = await User.findById(currentUserId).select('-password')
+            const recieverUser = await User.findById(userId).select('-password')
+            const senderUserData = {
+                userId: senderUser._id,
+                username: senderUser.username,
+                photo: senderUser.photo
+            }
+            const receiverUserData = {
+                userId: recieverUser._id,
+                username: recieverUser.username,
+                photo: recieverUser.photo
+            }
+            if (!chat) {
+                // Create a new chat if it doesn't exist
+                chat = new Chat({
+                    participants: [senderUserData, receiverUserData],
+                    name: `Chat between ${currentUserId} and ${userId}`,
+                });
+
+                await chat.save();
+            }
+            const notificationContent = `${senderUser.username} started chat with you.`;
+
+            if (senderUser) {
+                await Notification.create({
+                    userId: userId,
+                    type: 'startedChat',
+                    content: notificationContent,
+                    chatId: chat._id
+                })
+            }
+            let notification = {
+                userId: userId,
+                type: 'startedChat',
+                content: notificationContent,
+                chatId: chat._id
+            }
+
+            req.io.emit('newChat', { chat, userId: currentUserId });
+
+            res.status(200).json({ message: 'Chat started successfully', chat ,notification:notification });
+        } catch (error) {
+            console.error('Error starting chat:', error);
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    },
     getUserByUsername: async (req, res) => {
         try {
             const username = req.params.username;
@@ -101,7 +157,7 @@ const UserController = {
     reactToMessage: async (req, res) => {
         const { messageId, userId, reactionType } = req.body;
 
-        const validReactions = ['❤️', '👍', '😂', '🫶'];
+        const validReactions = ['❤️', '😂', '👍', '😲', '😡'];
         if (!validReactions.includes(reactionType)) {
             return res.status(400).json({ message: 'Invalid reaction type' });
         }
@@ -113,7 +169,6 @@ const UserController = {
             }
 
             const messageOwner = message.sender.senderId;
-
             const user = await User.findById(userId);
             if (!user) {
                 return res.status(404).json({ message: 'User not found' });
@@ -122,6 +177,7 @@ const UserController = {
             let existingReaction = message.reacts.find(r => r.users.some(id => id.equals(userId)));
 
             if (existingReaction) {
+                // User is unreacting or changing their reaction
                 existingReaction.users = existingReaction.users.filter(id => !id.equals(userId));
 
                 if (existingReaction.users.length === 0) {
@@ -156,12 +212,13 @@ const UserController = {
             }
 
             req.io.emit('messageUpdated', message);
-            res.status(200).json({ message: 'Reaction updated successfully', message, notification: notification});
+            res.status(200).json({ message: 'Reaction updated successfully', message, notification: notification });
         } catch (error) {
             console.error('Error reacting to message:', error);
             res.status(500).json({ message: 'Server error', error: error.message });
         }
     },
+
 
 
 

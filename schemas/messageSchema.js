@@ -1,4 +1,5 @@
 // schemas/messageSchema.js
+//Schema for all chat i cant use it anywhere else!!!!
 const mongoose = require('mongoose');
 
 const messageSchema = new mongoose.Schema({
@@ -9,7 +10,7 @@ const messageSchema = new mongoose.Schema({
     },
     content: { type: String, required: true },
     reacts: [{
-        type: { type: String, enum: ['❤️', '👍', '😂', '🫶'], required: true },
+        type: { type: String, enum: ['❤️', '😂', '👍', '😲', '😡'], required: true },
         users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
     }],
     timestamp: { type: Date, default: Date.now },
