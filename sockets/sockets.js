@@ -11,7 +11,6 @@ const initializeSocket = (server) => {
     });
 
     io.on('connection', (socket) => {
-        console.log('A user connected:', socket.id);
         // Handle user going online
         socket.on('userOnline', (userId) => {
             onlineUsers.set(userId, socket.id);
@@ -31,10 +30,8 @@ const initializeSocket = (server) => {
             if (notification && notification.userId) {
                 const recipientSocketId = onlineUsers.get(notification.userId);
                 if (recipientSocketId) {
-                    console.log(`Emitting notification to socket ID: ${recipientSocketId}`);
                     io.to(recipientSocketId).emit('newNotification', notification);
                 } else {
-                    console.log(`User with ID ${notification.userId} is not online.`);
                 }
             } else {
                 console.error('Invalid notification object:', notification);
@@ -44,17 +41,14 @@ const initializeSocket = (server) => {
 
         socket.on('joinChat', (chatId) => {
             socket.join(chatId);
-            console.log(`User with socket ID ${socket.id} joined chat ${chatId}`);
         });
 
         // Handle user leaving a chat room
         socket.on('leaveChat', (chatId) => {
             socket.leave(chatId);
-            console.log(`User with socket ID ${socket.id} left chat ${chatId}`);
         });
 
         socket.on('disconnect', () => {
-            console.log('A user disconnected:', socket.id);
             onlineUsers.forEach((socketId, userId) => {
                 if (socketId === socket.id) {
                     onlineUsers.delete(userId);

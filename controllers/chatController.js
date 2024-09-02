@@ -5,6 +5,139 @@ const Notification = require('../schemas/notificationSchema');
 const mongoose = require('mongoose');
 
 const ChatController = {
+    deleteChat: async (req, res) => {
+        const { chatId, userId } = req.body;
+
+        try {
+            const chat = await Chat.findById(chatId);
+            if (!chat) {
+                return res.status(404).json({ message: 'Chat not found' });
+            }
+
+            // Ensure the user is the creator
+            if (chat.creatorId.toString() !== userId.toString()) {
+                return res.status(403).json({ message: 'Unauthorized to delete this chat' });
+            }
+
+            // Delete the chat
+            await Chat.deleteOne({ _id: chatId });
+
+            // Emit the chatDeleted event with chatId only
+            req.io.emit('chatDeleted', chatId);
+
+            res.status(200).json({ message: 'Chat deleted', redirectTo: '/conversations' });
+        } catch (error) {
+            console.error('Error deleting chat:', error);
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    },
+
+
+    leaveChat: async (req, res) => {
+        const { chatId, userId } = req.body;
+
+        try {
+            const chat = await Chat.findById(chatId);
+            if (!chat) {
+                return res.status(404).json({ message: 'Chat not found' });
+            }
+
+            // Remove the user from the participants list
+            chat.participants = chat.participants.filter(p => p.userId.toString() !== userId.toString());
+
+            // Check if the chat has no more participants
+            if (chat.participants.length === 0) {
+                // Optionally: delete the chat if no participants are left
+                await Chat.deleteOne({ _id: chatId });
+                req.io.emit('chatDeleted', chatId);
+                return res.status(200).json({ message: 'Chat deleted and user removed', redirectTo: '/conversations' });
+            } else {
+                // Update the chat without deleting it
+                await chat.save();
+                req.io.to(chatId).emit('userLeft', { chatId, userId });
+                res.status(200).json({ message: 'User left the chat', redirectTo: '/conversations' });
+            }
+
+        } catch (error) {
+            console.error('Error leaving chat:', error);
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    },
+
+    addReaction: async (req, res) => {
+        const { messageId, userId, reaction, username, conversationId } = req.body;
+        const validReactions = ['❤️', '😂', '👍', '😲', '😡'];
+        if (reaction && !validReactions.includes(reaction)) {
+            return res.status(400).json({ message: 'Invalid reaction type' });
+        }
+
+        try {
+            // Find the message by ID
+            const message = await BasicMessage.findById(messageId);
+            if (!message) {
+                return res.status(404).json({ message: 'Message not found', messageId });
+            }
+
+            // Find existing reaction by the user
+            let existingReaction = message.reacts.find(r => r.users.includes(userId));
+
+            if (existingReaction) {
+                // User is updating their reaction
+                if (reaction === null) {
+                    // User is removing their reaction
+                    existingReaction.users = existingReaction.users.filter(id => !id.equals(userId));
+                    if (existingReaction.users.length === 0) {
+                        message.reacts = message.reacts.filter(r => !r.users.includes(userId));
+                    }
+                } else {
+                    // User is changing their reaction
+                    existingReaction.type = reaction;
+                    if (!existingReaction.users.includes(userId)) {
+                        existingReaction.users.push(userId);
+                    }
+                }
+            } else {
+                // User is adding a new reaction
+                if (reaction !== null) {
+                    let newReaction = message.reacts.find(r => r.type === reaction);
+                    if (newReaction) {
+                        if (!newReaction.users.includes(userId)) {
+                            newReaction.users.push(userId);
+                        }
+                    } else {
+                        message.reacts.push({ type: reaction, users: [userId] });
+                    }
+                }
+            }
+
+            // Save the updated message
+            await message.save();
+
+            // Populate the message reacts with user data for broadcasting
+            const updatedMessage = await BasicMessage.findById(messageId).populate('reacts.users');
+            req.io.emit('reactionUpdated', updatedMessage);
+
+            const chat = await Chat.findById(conversationId)
+            // Create and send notification if needed
+            if (message.senderId.toString() !== userId.toString()) {
+                const senderNotification = {
+                    userId: message.senderId,
+                    type: 'reaction',
+                    content: `${username} reacted to your message with "${reaction} in ${chat.name}`,
+                    chatId: conversationId
+                };
+
+                await Notification.create(senderNotification);
+
+                res.status(200).json({ message: updatedMessage, notification: senderNotification });
+            }
+
+        } catch (error) {
+            console.error('Error adding reaction:', error);
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    },
+
 
     getMessagesByChatId: async (req, res) => {
         const { chatId } = req.params;
@@ -13,7 +146,8 @@ const ChatController = {
             const chat = await Chat.findById(chatId)
             const participants = chat.participants
             const messages = await BasicMessage.find({ chatId }).sort({ createdAt: 1 });
-            res.status(200).json({ messages, participants});
+            const creatorId = chat.creatorId
+            res.status(200).json({ messages, participants , creatorId: creatorId});
         } catch (error) {
             console.error('Error fetching messages:', error);
             res.status(500).json({ message: 'Server error', error: error.message });
@@ -55,7 +189,7 @@ const ChatController = {
         }
     },
 
-    addParticipants:  async (req, res) => {
+    addParticipants: async (req, res) => {
         const { chatId, newParticipant, user } = req.body;
 
         try {
@@ -98,8 +232,10 @@ const ChatController = {
                 chatId: chatId
             });
 
-            // Emit event to notify all connected clients about the new participant
-            req.io.to(chatId).emit('addUser', chatId);
+            req.io.to(chatId).emit('userAdded', { chatId, newParticipant: newParticipantDetails });
+            const newPartString = newParticipant.toString()
+            req.io.emit('youHaveBeenAdded', { newPartString })
+
 
             res.status(200).json({ message: 'Participant added successfully', chat, notification });
         } catch (error) {
@@ -107,11 +243,6 @@ const ChatController = {
             res.status(500).json({ message: 'Server error', error: error.message });
         }
     },
-
-
-
-
-
 
     getChat: async (req, res) => {
         const { chatId } = req.params;
@@ -158,7 +289,7 @@ const ChatController = {
             const notifications = [];
             for (const user of chat.participants) {
                 if (user.userId.toString() !== senderId.toString()) {
-                    const notificationContent = `${sender.username} sent a message in chat.`;
+                    const notificationContent = `${sender.username} sent a message in ${chat.name}.`;
                     const notification = await Notification.create({
                         userId: user.userId,
                         type: 'message',

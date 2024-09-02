@@ -2,16 +2,18 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../schemas/userSchema');
 const Message = require('../schemas/messageSchema')
+const MessageForConversations = require('../schemas/messageSchemaForChats')
 const Notification = require('../schemas/notificationSchema')
 const Chat = require('../schemas/chatSchema')
+const mongoose = require('mongoose')
 require('dotenv').config();
 
 
 
 const UserController = {
     startChatWithUser: async (req, res) => {
-        const { userId } = req.body; // ID of the user whose profile is being viewed
-        const currentUserId = req.user.id; // Assuming `req.user.id` is available from the auth middleware
+        const { userId, chatName } = req.body;
+        const currentUserId = req.user.id;
 
         try {
             // Check if a chat already exists between these users
@@ -34,7 +36,8 @@ const UserController = {
                 // Create a new chat if it doesn't exist
                 chat = new Chat({
                     participants: [senderUserData, receiverUserData],
-                    name: `Chat between ${currentUserId} and ${userId}`,
+                    name: chatName,
+                    creatorId: currentUserId
                 });
 
                 await chat.save();
@@ -58,7 +61,7 @@ const UserController = {
 
             req.io.emit('newChat', { chat, userId: currentUserId });
 
-            res.status(200).json({ message: 'Chat started successfully', chat ,notification:notification });
+            res.status(200).json({ message: 'Chat started successfully', chat , notification });
         } catch (error) {
             console.error('Error starting chat:', error);
             res.status(500).json({ message: 'Server error', error: error.message });
@@ -67,7 +70,7 @@ const UserController = {
     getUserByUsername: async (req, res) => {
         try {
             const username = req.params.username;
-            const user = await User.findOne({ username }).select('-password'); // Exclude password
+            const user = await User.findOne({ username }).select('-password');
 
             if (!user) {
                 return res.status(404).json({ message: 'User not found' });
@@ -78,24 +81,85 @@ const UserController = {
             res.status(500).json({ message: 'Server error', error: error.message });
         }
     },
-
-    updateProfile: async (req, res) => {
-        const { userId } = req.body;
-        const updateData = req.body; // Make sure to filter out fields you don't want to update
+    changePassword: async (req, res) => {
+        const { userId, oldPassword, newPassword } = req.body;
 
         try {
-            const updatedUser = await User.findByIdAndUpdate(userId, updateData, { new: true });
-            if (!updatedUser) {
+            const user = await User.findById(userId);
+            if (!user) {
                 return res.status(404).json({ message: 'User not found' });
             }
-            res.status(200).json({ message: 'Profile updated successfully', user: updatedUser });
+
+            // Validate old password
+            const isMatch = await bcrypt.compare(oldPassword, user.password);
+            if (!isMatch) {
+                return res.status(400).json({ errors: ['Invalid password',''] });
+            }
+
+            // Hash new password and save
+            user.password = await bcrypt.hash(newPassword, 10);
+            await user.save();
+
+            res.status(200).json({ message: 'Password updated successfully' });
         } catch (error) {
-            console.error('Error updating profile:', error);
+            console.error('Error changing password:', error);
+            res.status(500).json({ message: 'Server error', error: error.message });
+        }
+    },
+    changeUsername: async (req, res) => {
+        const { userId, newUsername, oldPassword } = req.body;
+
+        try {
+            // Find the user who is attempting to change their username
+            const user = await User.findById(userId);
+            if (!user) {
+                return res.status(404).json({ errors: 'User not found' });
+            }
+
+            // Validate the old password
+            const isMatch = await bcrypt.compare(oldPassword, user.password);
+            if (!isMatch) {
+                return res.status(400).json({ errors: ['Invalid password',''] });
+            }
+
+            // Check if the new username is already taken by another user
+            const existingUser = await User.findOne({ username: newUsername });
+            if (existingUser && existingUser._id.toString() !== userId.toString()) {
+                return res.status(400).json({ message: 'Username already taken' });
+            }
+
+            user.username = newUsername;
+            await user.save();
+
+            const objectIdUserId = new mongoose.Types.ObjectId(userId);
+
+            const updateResultChat = await Chat.updateMany(
+                { "participants.userId": objectIdUserId },
+                { $set: { "participants.$[elem].username": newUsername } },
+                { arrayFilters: [{ "elem.userId": objectIdUserId }] }
+            );
+
+            const updateResultMessage = await MessageForConversations.updateMany(
+                { "senderId": userId },
+                { $set: { "senderUsername": newUsername } }
+            );
+            const updateResultAllChat = await Message.updateMany(
+                { "sender.senderId": userId },
+                { $set: { "sender.senderUsername": newUsername } }
+            );
+
+            req.io.emit('profileUsernameChanged', { userId, newUsername });
+
+            res.status(200).json({ message: 'Username updated successfully', user });
+        } catch (error) {
+            console.error('Error updating username:', error);
             res.status(500).json({ message: 'Server error', error: error.message });
         }
     },
 
-// Change Profile Photo
+
+
+
     changePhoto: async (req, res) => {
         const { userId, photoUrl } = req.body;
 
@@ -108,7 +172,24 @@ const UserController = {
             user.photo = photoUrl;
             await user.save();
 
-            // Emit event for profile photo change
+            const objectIdUserId = new mongoose.Types.ObjectId(userId);
+
+
+            const updateResultChat = await Chat.updateMany(
+                { "participants.userId": objectIdUserId },
+                { $set: { "participants.$[elem].photo": photoUrl } },
+                { arrayFilters: [{ "elem.userId": objectIdUserId }] }
+            );
+
+            const updateResultMessage = await MessageForConversations.updateMany(
+                { "senderId": userId },
+                { $set: { "senderPhoto": photoUrl } }
+            );
+            const updateResultAllChat = await Message.updateMany(
+                { "sender.senderId": userId },
+                { $set: { "sender.senderPhoto": photoUrl } }
+            );
+
             req.io.emit('profilePhotoChanged', { userId, photoUrl });
 
             res.status(200).json({ message: 'Profile photo updated successfully', photoUrl });
@@ -117,6 +198,8 @@ const UserController = {
             res.status(500).json({ message: 'Server error', error: error.message });
         }
     },
+
+
 
     markNotificationsAsRead: async (req, res) => {
         const { userId } = req.params;
@@ -197,7 +280,7 @@ const UserController = {
             await message.save();
 
             if (messageOwner.toString() !== userId.toString()) {
-                const notificationContent = `${user.username} reacted to your message ${reactionType}.`;
+                const notificationContent = `${user.username} reacted to your message ${reactionType} in all chat.`;
                 await Notification.create({
                     userId: messageOwner,
                     type: 'reaction',
@@ -208,7 +291,7 @@ const UserController = {
             let notification = {
                 userId: messageOwner,
                 type: 'reaction',
-                content: `${user.username} reacted to your message ${reactionType}.`
+                content: `${user.username} reacted to your message ${reactionType} in all chat.`
             }
 
             req.io.emit('messageUpdated', message);
@@ -221,72 +304,6 @@ const UserController = {
 
 
 
-
-    // controllers/userController.js
-    sendFriendRequest:  async (req, res) => {
-        const { senderId, receiverId } = req.body;
-
-        try {
-            const receiver = await User.findById(receiverId);
-            if (!receiver) {
-                return res.status(404).json({ message: 'User not found' });
-            }
-
-            if (receiver.friendRequests.includes(senderId)) {
-                return res.status(400).json({ message: 'Friend request already sent' });
-            }
-
-            receiver.friendRequests.push(senderId);
-            await receiver.save();
-
-            // Create a notification for the receiver
-            const notificationContent = `${senderId} sent you a friend request.`;
-            await Notification.create({
-                userId: receiverId,
-                type: 'friendRequest',
-                content: notificationContent
-            });
-
-            // Emit the friend request notification to the receiver
-            req.io.to(receiverId).emit('newNotification', { userId: receiverId, type: 'friendRequest', content: notificationContent });
-
-            res.status(200).json({ message: 'Friend request sent' });
-        } catch (error) {
-            console.error('Error sending friend request:', error);
-            res.status(500).json({ message: 'Server error', error: error.message });
-        }
-    },
-
-    acceptFriendRequest: async (req, res) => {
-        const { userId, friendId } = req.body;
-
-        try {
-            const user = await User.findById(userId);
-            const friend = await User.findById(friendId);
-
-            if (!user || !friend) {
-                return res.status(404).json({ message: 'User not found' });
-            }
-
-            // Add each other to the friends list
-            user.friends.push(friendId);
-            friend.friends.push(userId);
-
-            // Remove friend request
-            user.friendRequests = user.friendRequests.filter(reqId => reqId.toString() !== friendId);
-            await user.save();
-            await friend.save();
-
-            // Emit an event to notify the users about the new friendship
-            req.io.to(userId).emit('friendRequestAccepted', { friendId });
-            req.io.to(friendId).emit('friendRequestAccepted', { friendId: userId });
-
-            res.status(200).json({ message: 'Friend request accepted' });
-        } catch (error) {
-            console.error('Error accepting friend request:', error);
-            res.status(500).json({ message: 'Server error', error: error.message });
-        }
-    },
     sendMessage: async (req, res) => {
         const { senderId,senderUsername, senderPhoto, content } = req.body;
 
