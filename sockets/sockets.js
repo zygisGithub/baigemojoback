@@ -11,13 +11,11 @@ const initializeSocket = (server) => {
     });
 
     io.on('connection', (socket) => {
-        // Handle user going online
         socket.on('userOnline', (userId) => {
             onlineUsers.set(userId, socket.id);
             io.emit('updateOnlineUsers', Array.from(onlineUsers.keys()));
         });
 
-        // Handle user going offline
         socket.on('userOffline', (userId) => {
             if (onlineUsers.has(userId)) {
                 onlineUsers.delete(userId);
@@ -25,7 +23,6 @@ const initializeSocket = (server) => {
             }
         });
 
-        // Handle notifications
         socket.on('sendNotification', (notification) => {
             if (notification && notification.userId) {
                 const recipientSocketId = onlineUsers.get(notification.userId);
@@ -43,7 +40,6 @@ const initializeSocket = (server) => {
             socket.join(chatId);
         });
 
-        // Handle user leaving a chat room
         socket.on('leaveChat', (chatId) => {
             socket.leave(chatId);
         });

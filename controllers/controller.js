@@ -110,19 +110,16 @@ const UserController = {
         const { userId, newUsername, oldPassword } = req.body;
 
         try {
-            // Find the user who is attempting to change their username
             const user = await User.findById(userId);
             if (!user) {
                 return res.status(404).json({ errors: 'User not found' });
             }
 
-            // Validate the old password
             const isMatch = await bcrypt.compare(oldPassword, user.password);
             if (!isMatch) {
                 return res.status(400).json({ errors: ['Invalid password',''] });
             }
 
-            // Check if the new username is already taken by another user
             const existingUser = await User.findOne({ username: newUsername });
             if (existingUser && existingUser._id.toString() !== userId.toString()) {
                 return res.status(400).json({ message: 'Username already taken' });
