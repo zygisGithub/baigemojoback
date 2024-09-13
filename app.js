@@ -12,15 +12,15 @@ const io = initializeSocket(server);
 
 // CORS configuration
 const corsOptions = {
-    origin: '*', // Change this to a specific origin in production for security
+    origin: 'https://helsword.org', // Use a specific origin instead of '*'
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
 };
 
-// Use CORS middleware
+// Use CORS middleware globally
 app.use(cors(corsOptions));
 
-// Handle preflight requests
+// Handle preflight requests globally
 app.options('*', cors(corsOptions));
 
 // Middleware to parse JSON
