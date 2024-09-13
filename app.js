@@ -11,12 +11,13 @@ const server = http.createServer(app);
 const io = initializeSocket(server);
 
 const corsOptions = {
-    origin: '*',
+    origin: '*',  // You might want to restrict this to your specific domain in production
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: '*',
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
 };
 
 app.use(cors(corsOptions));
+
 app.use(express.json());
 
 mongoose.connect(process.env.MONGO_URI, {
