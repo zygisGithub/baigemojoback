@@ -11,9 +11,9 @@ const server = http.createServer(app);
 const io = initializeSocket(server);
 
 const corsOptions = {
-    origin: 'https://helsword.org',
-    preflightContinue: false,
-    optionsSuccessStatus: 204
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
 };
 
 app.use(cors(corsOptions));
