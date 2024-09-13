@@ -10,11 +10,12 @@ const app = express();
 const server = http.createServer(app);
 const io = initializeSocket(server);
 
-const corsOptions = {
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: '*',
-};
+app.use(cors({
+    origin: 'https://helsword.org', // Update to your allowed origin
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allow relevant HTTP methods
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'], // Specify allowed headers
+    credentials: true // Include if you need to support credentials (cookies, auth headers)
+}));
 
 app.use(cors(corsOptions));
 app.use(express.json());
