@@ -8,11 +8,10 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
-
 const io = initializeSocket(server);
 
 const corsOptions = {
-    origin: '*', 
+    origin: '*',
     preflightContinue: false,
     optionsSuccessStatus: 204
 };
