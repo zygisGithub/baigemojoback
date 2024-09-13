@@ -13,7 +13,7 @@ const io = initializeSocket(server);
 const corsOptions = {
     origin: '*',
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
+    allowedHeaders: '*',
 };
 
 app.use(cors(corsOptions));
