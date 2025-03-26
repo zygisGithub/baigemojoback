@@ -5,8 +5,9 @@ let onlineUsers = new Map();
 const initializeSocket = (server) => {
     const io = socketIo(server, {
         cors: {
-            origin: "*",
-            methods: ["GET", "POST"]
+            origin: 'https://baigemojofront.onrender.com',
+            methods: ['GET', 'POST'],
+            credentials: true
         }
     });
 

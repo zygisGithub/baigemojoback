@@ -12,10 +12,12 @@ const io = initializeSocket(server);
 
 // CORS configuration
 const corsOptions = {
-    origin: 'https://helsword.org', // Use a specific origin instead of '*'
+    origin: 'https://baigemojofront.onrender.com',
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+    credentials: true
 };
+
 
 // Use CORS middleware globally
 app.use(cors(corsOptions));
@@ -50,7 +52,7 @@ app.use('/api/users', (req, res, next) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 443;
-server.listen(PORT, '0.0.0.0', () => {
+const PORT = process.env.PORT;
+server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
